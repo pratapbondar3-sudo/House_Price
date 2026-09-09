@@ -53,3 +53,17 @@ def predict():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+from pathlib import Path
+import pickle
+
+# Resolves the directory where app.py actually lives
+BASE_DIR = Path(__file__).resolve().parent
+
+# Check root or parent directory
+model_path = BASE_DIR / "linear.pkl"
+if not model_path.exists():
+    model_path = BASE_DIR.parent / "linear.pkl"
+
+with open(model_path, "rb") as f:
+    model = pickle.load(f)
