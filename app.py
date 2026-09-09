@@ -1,72 +1,55 @@
 import os
 import pickle
 import numpy as np
-from flask import Flask, jsonify, request
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Load model relative to file location
-model_path = os.path.join(os.path.dirname(__file__), "linear.pkl")
-with open(model_path, "rb") as f:
+# Locate linear.pkl relative to the project directory
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'linear.pkl')
+if not os.path.exists(MODEL_PATH):
+    # Fallback if app is running from api/ subdirectory
+    MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'linear.pkl')
+
+with open(MODEL_PATH, 'rb') as f:
     model = pickle.load(f)
 
-# Categorical mapping for Neighborhood_Quality
-QUALITY_MAPPING = {
-    "poor": 1.0,
-    "fair": 2.0,
-    "average": 3.0,
-    "good": 4.0,
-    "excellent": 5.0,
-}
+# Features expected by your scikit-learn model
+FEATURE_NAMES = [
+    "Square_Footage",
+    "Num_Bedrooms",
+    "Num_Bathrooms",
+    "Year_Built",
+    "Lot_Size",
+    "Garage_Size",
+    "Neighborhood_Quality"
+]
 
+@app.route('/', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "expected_features": FEATURE_NAMES
+    }), 200
 
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify(
-        {
-            "status": "online",
-            "neighborhood_quality_options": list(QUALITY_MAPPING.keys()),
-        }
-    )
-
-
-@app.route("/predict", methods=["POST"])
+@app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json(force=True)
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON payload provided"}), 400
 
     try:
-        # Resolve Neighborhood_Quality (handles both string category or raw integer/float)
-        raw_quality = data.get("Neighborhood_Quality")
-        if isinstance(raw_quality, str):
-            quality_val = QUALITY_MAPPING.get(raw_quality.strip().lower())
-            if quality_val is None:
-                return (
-                    jsonify(
-                        {
-                            "error": f"Invalid Neighborhood_Quality. Choose from: {list(QUALITY_MAPPING.keys())}"
-                        }
-                    ),
-                    400,
-                )
-        else:
-            quality_val = float(raw_quality)
+        # Extract features in the correct order
+        features = [float(data[feature]) for feature in FEATURE_NAMES]
+    except KeyError as e:
+        return jsonify({"error": f"Missing required feature: {str(e)}"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "All feature values must be numeric"}), 400
 
-        features = [
-            float(data["Square_Footage"]),
-            float(data["Num_Bedrooms"]),
-            float(data["Num_Bathrooms"]),
-            float(data["Year_Built"]),
-            float(data["Lot_Size"]),
-            float(data["Garage_Size"]),
-            quality_val,
-        ]
+    prediction = model.predict(np.array([features]))
+    return jsonify({
+        "prediction": float(prediction[0])
+    }), 200
 
-        prediction = model.predict(np.array([features]))[0]
-        return jsonify({"prediction": round(float(prediction), 2)})
-
-    except (KeyError, TypeError, ValueError) as err:
-        return jsonify({"error": f"Missing or invalid input: {str(err)}"}), 400
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     app.run(debug=True)
