@@ -1,20 +1,21 @@
 import os
 import pickle
+from pathlib import Path
 import numpy as np
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Locate linear.pkl relative to the project directory
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'linear.pkl')
-if not os.path.exists(MODEL_PATH):
-    # Fallback if app is running from api/ subdirectory
-    MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'linear.pkl')
+# Safely locate linear.pkl in parent directory or same directory
+CURRENT_DIR = Path(__file__).resolve().parent
+MODEL_PATH = CURRENT_DIR.parent / "linear.pkl"
 
-with open(MODEL_PATH, 'rb') as f:
+if not MODEL_PATH.exists():
+    MODEL_PATH = CURRENT_DIR / "linear.pkl"
+
+with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
-# Features expected by your scikit-learn model
 FEATURE_NAMES = [
     "Square_Footage",
     "Num_Bedrooms",
@@ -26,44 +27,17 @@ FEATURE_NAMES = [
 ]
 
 @app.route('/', methods=['GET'])
-def health_check():
-    return jsonify({
-        "status": "healthy",
-        "expected_features": FEATURE_NAMES
-    }), 200
+def index():
+    return jsonify({"status": "ready", "features": FEATURE_NAMES})
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No JSON payload provided"}), 400
-
+    data = request.get_json() or {}
     try:
-        # Extract features in the correct order
-        features = [float(data[feature]) for feature in FEATURE_NAMES]
+        features = [float(data[k]) for k in FEATURE_NAMES]
+        prediction = model.predict([features])
+        return jsonify({"prediction": float(prediction[0])})
     except KeyError as e:
-        return jsonify({"error": f"Missing required feature: {str(e)}"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"error": "All feature values must be numeric"}), 400
-
-    prediction = model.predict(np.array([features]))
-    return jsonify({
-        "prediction": float(prediction[0])
-    }), 200
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
-from pathlib import Path
-import pickle
-
-# Resolves the directory where app.py actually lives
-BASE_DIR = Path(__file__).resolve().parent
-
-# Check root or parent directory
-model_path = BASE_DIR / "linear.pkl"
-if not model_path.exists():
-    model_path = BASE_DIR.parent / "linear.pkl"
-
-with open(model_path, "rb") as f:
-    model = pickle.load(f)
+        return jsonify({"error": f"Missing key: {str(e)}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
