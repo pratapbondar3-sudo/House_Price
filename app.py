@@ -13,7 +13,23 @@ MODEL_PATH = CURRENT_DIR.parent / "linear.pkl"
 if not MODEL_PATH.exists():
     MODEL_PATH = CURRENT_DIR / "linear.pkl"
 
-with open(MODEL_PATH, "rb") as f:
+with open(MODEL_PATH, "rb") as f:import os
+import pickle
+from pathlib import Path
+
+# Absolute path to where this script lives
+CURRENT_DIR = Path(__file__).resolve().parent
+MODEL_PATH = CURRENT_DIR / "linear.pkl"
+
+if not MODEL_PATH.exists():
+    MODEL_PATH = CURRENT_DIR.parent / "linear.pkl"
+
+try:
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
+except Exception as err:
+    model = None
+    load_error = str(err)
     model = pickle.load(f)
 
 FEATURE_NAMES = [
